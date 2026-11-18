@@ -16,7 +16,7 @@ export default function AdminDashboard() {
   const [db, setDb] = useState<ReturnType<typeof createSupabaseBrowserClient> | null>(null);
   const [user, setUser] = useState<User | null>(null);
   const [adminMembership, setAdminMembership] = useState<{ userId: string; allowed: boolean } | null>(null);
-  const isAdmin = user && adminMembership?.userId === user.id ? adminMembership.allowed : null;
+  const isAdmin = user && adminMembership && adminMembership.userId === user.id ? adminMembership.allowed : null;
   const [authLoading, setAuthLoading] = useState(true);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
