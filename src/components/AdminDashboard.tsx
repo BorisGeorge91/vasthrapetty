@@ -36,6 +36,11 @@ export default function AdminDashboard() {
   const [filter, setFilter] = useState("all");
 
   useEffect(() => {
+    if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY) {
+      setAuthError("Supabase is not configured. Add the project URL and publishable key to the deployment environment.");
+      setAuthLoading(false);
+      return;
+    }
     const client = createSupabaseBrowserClient();
     setDb(client);
     client.auth.getSession().then(({ data }) => setUser(data.session?.user ?? null)).finally(() => setAuthLoading(false));
@@ -149,6 +154,7 @@ export default function AdminDashboard() {
     <label className="admin-form-field"><span>Password</span><input type="password" required value={password} onChange={e => setPassword(e.target.value)} autoComplete="current-password"/></label>
     <button className="button admin-submit" disabled={authLoading}>Sign in ↗</button>
   </form></main>;
+  if (isAdmin === null) return <div className="admin-loading">Checking workspace access…</div>;
   if (isAdmin === false) return <main className="admin-login-page"><section className="admin-login">
     <div className="eyebrow">Access not enabled</div><h1>One final setup step.</h1><p>Your account is signed in, but it has not yet been added to the Vasthrapetty admin allowlist.</p>
     <p className="user-id-label">Your Supabase user ID</p><code className="user-id">{user.id}</code>
