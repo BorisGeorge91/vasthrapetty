@@ -77,7 +77,9 @@ export default function Storefront({ products }: { products: Product[] }) {
     setForm(current=>({...current,addons:current.addons.includes(item)?current.addons.filter(x=>x!==item):[...current.addons,item]}));
   }
   async function submit(event:FormEvent<HTMLFormElement>) {
-    event.preventDefault(); setError(""); setSubmitting(true);
+    event.preventDefault();
+    if (step < 5) { setStep(current => Math.min(5, current + 1)); return; }
+    setError(""); setSubmitting(true);
     try {
       const response=await fetch("/api/enquiries",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(form)});
       const result=await response.json();
