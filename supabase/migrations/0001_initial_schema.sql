@@ -218,6 +218,9 @@ begin
     raise exception 'One or more enquiry fields exceed the allowed length.';
   end if;
 
+  if p_payload ? 'addons' and jsonb_typeof(p_payload->'addons') <> 'array' then
+    raise exception 'Invalid hamper additions.';
+  end if;
   if nullif(p_payload->>'deliveryDate','') is not null then
     v_delivery_date := (p_payload->>'deliveryDate')::date;
   end if;
@@ -251,7 +254,7 @@ begin
     nullif(trim(p_payload->>'city'),''),
     nullif(trim(p_payload->>'pin'),''),
     v_lat, v_lon,
-    (jsonb_typeof(p_payload->'addons') = 'array' and jsonb_array_length(p_payload->'addons') > 0)
+    coalesce((jsonb_typeof(p_payload->'addons') = 'array' and jsonb_array_length(p_payload->'addons') > 0), false)
       or nullif(trim(p_payload->>'customNotes'),'') is not null,
     nullif(v_notes,''),
     p_payload
