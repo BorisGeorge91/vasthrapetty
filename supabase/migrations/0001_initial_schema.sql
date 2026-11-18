@@ -88,6 +88,15 @@ create table if not exists public.admin_users (
   created_at timestamptz not null default now()
 );
 
+
+insert into public.categories(name,slug,display_order) values
+  ('Signature hamper','signature-hamper',1),
+  ('Saree edit','saree-edit',2),
+  ('Custom gifting','custom-gifting',3),
+  ('Festive collection','festive-collection',4),
+  ('Accessories','accessories',5)
+on conflict (slug) do nothing;
+
 create index if not exists products_status_created_idx on public.products(status, created_at desc);
 create index if not exists products_category_idx on public.products(category_id);
 create index if not exists enquiries_status_created_idx on public.enquiries(status, created_at desc);
@@ -115,7 +124,7 @@ as $$
   select exists (select 1 from public.admin_users where user_id = auth.uid());
 $$;
 revoke all on function public.is_admin() from public;
-grant execute on function public.is_admin() to authenticated;
+grant execute on function public.is_admin() to anon, authenticated;
 
 -- Enable RLS across application data.
 alter table public.categories enable row level security;
