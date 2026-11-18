@@ -46,6 +46,8 @@ export default function AdminDashboard() {
     setDb(client);
     client.auth.getSession().then(({ data }) => setUser(data.session?.user ?? null)).finally(() => setAuthLoading(false));
     const { data: { subscription } } = client.auth.onAuthStateChange((_event, session) => {
+      // This callback synchronizes React with Supabase's external Auth session.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setUser(session?.user ?? null);
     });
     return () => subscription.unsubscribe();
