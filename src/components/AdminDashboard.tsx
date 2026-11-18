@@ -1,6 +1,8 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
+import Image from "next/image";
 import type { User } from "@supabase/supabase-js";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 
@@ -35,21 +37,22 @@ export default function AdminDashboard() {
   const [saving, setSaving] = useState(false);
   const [filter, setFilter] = useState("all");
 
+  const supabaseConfigured = Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY);
+
   useEffect(() => {
-    if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY) {
-      setAuthError("Supabase is not configured. Add the project URL and publishable key to the deployment environment.");
-      setAuthLoading(false);
-      return;
-    }
+    if (!supabaseConfigured) return;
     const client = createSupabaseBrowserClient();
     setDb(client);
     client.auth.getSession().then(({ data }) => setUser(data.session?.user ?? null)).finally(() => setAuthLoading(false));
-    const { data: { subscription } } = client.auth.onAuthStateChange((_event, session) => setUser(session?.user ?? null));
+    const { data: { subscription } } = client.auth.onAuthStateChange((_event, session) => {
+      setIsAdmin(null);
+      setUser(session?.user ?? null);
+    });
     return () => subscription.unsubscribe();
-  }, []);
+  }, [supabaseConfigured]);
 
   useEffect(() => {
-    if (!db || !user) { setIsAdmin(null); return; }
+    if (!db || !user) return;
     let alive = true;
     db.from("admin_users").select("user_id").eq("user_id", user.id).maybeSingle().then(({ data, error }) => {
       if (alive) setIsAdmin(!error && !!data);
@@ -57,9 +60,10 @@ export default function AdminDashboard() {
     return () => { alive = false; };
   }, [db, user]);
 
-  async function loadData() {
+  const loadData = useCallback(async (showSpinner = true) => {
     if (!db) return;
-    setLoading(true); setError("");
+    if (showSpinner) setLoading(true);
+    setError("");
     const [cats, prods, enqs] = await Promise.all([
       db.from("categories").select("id,name,slug").order("display_order"),
       db.from("products").select("id,name,description,price,status,category_id,categories(name),product_images(storage_path,display_order)").order("created_at", { ascending: false }),
@@ -70,8 +74,13 @@ export default function AdminDashboard() {
     setProducts((prods.data || []) as unknown as Product[]);
     setEnquiries((enqs.data || []) as unknown as Enquiry[]);
     setLoading(false);
-  }
-  useEffect(() => { if (isAdmin) loadData(); }, [isAdmin, db]);
+  }, [db]);
+
+  useEffect(() => {
+    if (!isAdmin) return;
+    const timer = window.setTimeout(() => { void loadData(false); }, 0);
+    return () => window.clearTimeout(timer);
+  }, [isAdmin, loadData]);
 
   const publishedCount = products.filter(p => p.status === "published").length;
   const newCount = enquiries.filter(e => e.status === "new").length;
@@ -146,9 +155,10 @@ export default function AdminDashboard() {
     setMessage("Enquiry status updated.");
   }
 
+  if (!supabaseConfigured) return <main className="admin-login-page"><section className="admin-login"><div className="eyebrow">Configuration required</div><h1>Supabase is not connected.</h1><p>Add NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY to the application environment, then reload this page.</p></section></main>;
   if (authLoading) return <div className="admin-loading">Opening your workspace…</div>;
   if (!user) return <main className="admin-login-page"><form className="admin-login" onSubmit={signIn}>
-    <a href="/" className="admin-back">← Vasthrapetty storefront</a><div className="eyebrow">Private workspace</div><h1>Welcome back.</h1><p>Sign in to manage your collection and customer enquiries.</p>
+    <Link href="/" className="admin-back">← Vasthrapetty storefront</Link><div className="eyebrow">Private workspace</div><h1>Welcome back.</h1><p>Sign in to manage your collection and customer enquiries.</p>
     {authError && <div className="admin-error">{authError}</div>}
     <label className="admin-form-field"><span>Email address</span><input type="email" required value={email} onChange={e => setEmail(e.target.value)} autoComplete="username"/></label>
     <label className="admin-form-field"><span>Password</span><input type="password" required value={password} onChange={e => setPassword(e.target.value)} autoComplete="current-password"/></label>
@@ -165,14 +175,14 @@ export default function AdminDashboard() {
   return <main className="admin-page">
     <aside className="admin-sidebar"><div className="admin-side-brand">VASTRAPETTY</div><div className="admin-side-label">WORKSPACE</div>
       {["overview", "products", "add", "enquiries"].map(item => <button key={item} className={tab === item ? "admin-side-link active" : "admin-side-link"} onClick={() => { setTab(item); setError(""); setMessage(""); if (item === "add" && !editingId) clearEditor(); }}>{item === "add" ? "Add a product" : item === "products" ? "Catalogue" : item === "enquiries" ? "Enquiries" : "Overview"}</button>)}
-      <div className="admin-side-label">SITE</div><a className="admin-side-link" href="/">View storefront ↗</a>
+      <div className="admin-side-label">SITE</div><Link className="admin-side-link" href="/">View storefront ↗</Link>
     </aside>
     <section className="admin-main">
       <div className="admin-top"><div><div className="eyebrow">Vasthrapetty workspace</div><h1>{tab === "add" ? (editingId ? "Edit product" : "Add a product") : tab === "products" ? "Catalogue management" : tab === "enquiries" ? "Customer enquiries" : "Overview"}</h1><p>Signed in as {user.email}</p></div><button className="button button-outline" onClick={signOut}>Sign out</button></div>
       {message && <div className="admin-toast">{message}</div>}{error && <div className="admin-error">{error}</div>}
       {tab === "overview" && <><div className="admin-stats"><div className="admin-stat"><span>Published products</span><strong>{publishedCount}</strong></div><div className="admin-stat"><span>New enquiries</span><strong>{newCount}</strong></div><div className="admin-stat"><span>Draft products</span><strong>{draftsCount}</strong></div></div><div className="admin-panel"><h2>Recent enquiries</h2>{enquiries.slice(0, 5).length ? <div className="admin-table-wrap"><table><thead><tr><th>Customer</th><th>Occasion</th><th>Received</th><th>Status</th></tr></thead><tbody>{enquiries.slice(0, 5).map(e => <tr key={e.id}><td>{e.customers?.full_name || "Customer"}<small>{e.customers?.whatsapp_number || e.customers?.email || "No contact shared"}</small></td><td>{e.occasion || "—"}</td><td>{new Date(e.created_at).toLocaleDateString("en-IN")}</td><td>{e.status.replace("_", " ")}</td></tr>)}</tbody></table></div> : <p>No enquiries received yet.</p>}</div></>}
       {tab === "products" && <div className="admin-panel"><div className="admin-panel-heading"><h2>Your catalogue</h2><button className="button" onClick={() => { clearEditor(); setTab("add"); }}>Add a product +</button></div>
-        {loading ? <p>Loading catalogue…</p> : <div className="admin-product-grid">{products.map(product => { const image = product.product_images?.slice().sort((a, b) => a.display_order - b.display_order)[0]; const url = image ? db?.storage.from("product-images").getPublicUrl(image.storage_path).data.publicUrl : null; return <article className="admin-product" key={product.id}>{url ? <img src={url} alt={product.name}/> : <div className="admin-product-placeholder">V</div>}<div className="admin-product-body"><small>{product.categories?.name || "Uncategorised"} · {product.status}</small><h3>{product.name}</h3><p>{money(product.price)}</p><div className="admin-product-actions"><button className="button button-outline" onClick={() => editProduct(product)}>Edit</button><button className="button button-outline" onClick={() => setProductStatus(product, product.status === "published" ? "draft" : "published")}>{product.status === "published" ? "Unpublish" : "Publish"}</button><button className="quiet-action" onClick={() => setProductStatus(product, "archived")}>Archive</button></div></div></article>; })}</div>}
+        {loading ? <p>Loading catalogue…</p> : <div className="admin-product-grid">{products.map(product => { const image = product.product_images?.slice().sort((a, b) => a.display_order - b.display_order)[0]; const url = image ? db?.storage.from("product-images").getPublicUrl(image.storage_path).data.publicUrl : null; return <article className="admin-product" key={product.id}>{url ? <Image src={url} alt={product.name} width={640} height={480} unoptimized/> : <div className="admin-product-placeholder">V</div>}<div className="admin-product-body"><small>{product.categories?.name || "Uncategorised"} · {product.status}</small><h3>{product.name}</h3><p>{money(product.price)}</p><div className="admin-product-actions"><button className="button button-outline" onClick={() => editProduct(product)}>Edit</button><button className="button button-outline" onClick={() => setProductStatus(product, product.status === "published" ? "draft" : "published")}>{product.status === "published" ? "Unpublish" : "Publish"}</button><button className="quiet-action" onClick={() => setProductStatus(product, "archived")}>Archive</button></div></div></article>; })}</div>}
         {!products.length && !loading && <p>No products yet. Add your first catalogue item.</p>}
       </div>}
       {tab === "add" && <div className="admin-panel"><h2>{editingId ? "Product details" : "New catalogue item"}</h2><form onSubmit={saveProduct}><div className="admin-form-grid">
