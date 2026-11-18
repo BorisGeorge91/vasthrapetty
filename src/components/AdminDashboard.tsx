@@ -15,7 +15,8 @@ const slugify = (s: string) => s.toLowerCase().trim().replace(/[^a-z0-9]+/g, "-"
 export default function AdminDashboard() {
   const [db, setDb] = useState<ReturnType<typeof createSupabaseBrowserClient> | null>(null);
   const [user, setUser] = useState<User | null>(null);
-  const [isAdmin, setIsAdmin] = useState<boolean | null>(null);
+  const [adminMembership, setAdminMembership] = useState<{ userId: string; allowed: boolean } | null>(null);
+  const isAdmin = user && adminMembership?.userId === user.id ? adminMembership.allowed : null;
   const [authLoading, setAuthLoading] = useState(true);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -45,7 +46,6 @@ export default function AdminDashboard() {
     setDb(client);
     client.auth.getSession().then(({ data }) => setUser(data.session?.user ?? null)).finally(() => setAuthLoading(false));
     const { data: { subscription } } = client.auth.onAuthStateChange((_event, session) => {
-      setIsAdmin(null);
       setUser(session?.user ?? null);
     });
     return () => subscription.unsubscribe();
@@ -55,7 +55,7 @@ export default function AdminDashboard() {
     if (!db || !user) return;
     let alive = true;
     db.from("admin_users").select("user_id").eq("user_id", user.id).maybeSingle().then(({ data, error }) => {
-      if (alive) setIsAdmin(!error && !!data);
+      if (alive) setAdminMembership({ userId: user.id, allowed: !error && !!data });
     });
     return () => { alive = false; };
   }, [db, user]);
@@ -94,7 +94,7 @@ export default function AdminDashboard() {
     if (error) setAuthError(error.message);
     setAuthLoading(false);
   }
-  async function signOut() { await db?.auth.signOut(); setIsAdmin(null); setTab("overview"); }
+  async function signOut() { await db?.auth.signOut(); setTab("overview"); }
   function clearEditor() {
     setEditingId(null); setName(""); setDescription(""); setPrice("");
     setCategoryId(categories[0]?.id || ""); setStatus("draft"); setImages([]);
